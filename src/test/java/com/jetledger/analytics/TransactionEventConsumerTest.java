@@ -2,7 +2,6 @@ package com.jetledger.analytics;
 
 import com.jetledger.analytics.domain.Transaction;
 import com.jetledger.analytics.domain.TransactionRepository;
-import com.jetledger.analytics.infrastructure.consumer.CloudEvent;
 import com.jetledger.analytics.infrastructure.consumer.TransactionEventConsumer;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -27,6 +26,7 @@ import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.annotation.DirtiesContext;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
@@ -83,14 +83,18 @@ class TransactionEventConsumerTest {
             """.formatted(eventId, walletId, UUID.randomUUID().toString());
 
         kafkaTemplate.send("wallet.transactions.v1", eventId, json);
+        kafkaTemplate.flush();
 
-        var record = KafkaTestUtils.getSingleRecord(consumer, "wallet.transactions.v1", Duration.ofSeconds(10));
+        ConsumerRecord<String, String> record = KafkaTestUtils.getSingleRecord(consumer, "wallet.transactions.v1", Duration.ofSeconds(10));
         assertEquals(eventId, record.key());
 
         var handler = new TransactionEventConsumer(transactionRepository);
         handler.consume(record, null);
 
-        assertTrue(transactionRepository.existsByEventId(eventId));
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+            assertTrue(transactionRepository.existsByEventId(eventId))
+        );
+
         Transaction tx = transactionRepository.findAll().stream()
             .filter(t -> t.getEventId().equals(eventId))
             .findFirst().orElseThrow();
@@ -108,16 +112,21 @@ class TransactionEventConsumerTest {
             """.formatted(eventId, walletId, UUID.randomUUID().toString());
 
         kafkaTemplate.send("wallet.transactions.v1", eventId, json);
+        kafkaTemplate.flush();
 
-        var record1 = KafkaTestUtils.getSingleRecord(consumer, "wallet.transactions.v1", Duration.ofSeconds(10));
+        ConsumerRecord<String, String> record1 = KafkaTestUtils.getSingleRecord(consumer, "wallet.transactions.v1", Duration.ofSeconds(10));
         var handler = new TransactionEventConsumer(transactionRepository);
 
         handler.consume(record1, null);
-        assertEquals(1, transactionRepository.findAll().stream()
-            .filter(t -> t.getEventId().equals(eventId)).count());
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+            assertEquals(1, transactionRepository.findAll().stream()
+                .filter(t -> t.getEventId().equals(eventId)).count())
+        );
 
         handler.consume(record1, null);
-        assertEquals(1, transactionRepository.findAll().stream()
-            .filter(t -> t.getEventId().equals(eventId)).count());
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+            assertEquals(1, transactionRepository.findAll().stream()
+                .filter(t -> t.getEventId().equals(eventId)).count())
+        );
     }
 }

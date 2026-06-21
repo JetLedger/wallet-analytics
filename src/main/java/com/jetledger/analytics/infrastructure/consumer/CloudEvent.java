@@ -21,13 +21,13 @@ public record CloudEvent(
         try {
             JsonNode root = MAPPER.readTree(json);
             return Optional.of(new CloudEvent(
-                root.get("specversion").asText(),
-                root.get("type").asText(),
-                root.get("source").asText(),
-                root.get("id").asText(),
-                root.get("time").asText(),
-                root.get("datacontenttype").asText(),
-                root.get("data")
+                root.path("specversion").asText(),
+                root.path("type").asText(),
+                root.path("source").asText(),
+                root.path("id").asText(),
+                root.path("time").asText(),
+                root.path("datacontenttype").asText(),
+                root.path("data")
             ));
         } catch (JacksonException e) {
             return Optional.empty();

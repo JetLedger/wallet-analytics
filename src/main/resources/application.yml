@@ -1,7 +1,9 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:analyticsdb
-    driver-class-name: org.h2.Driver
+    url: jdbc:postgresql://localhost:5432/wallet_analytics
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: postgres
   jpa:
     hibernate:
       ddl-auto: create-drop
