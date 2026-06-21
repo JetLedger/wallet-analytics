@@ -26,14 +26,10 @@ import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.annotation.DirtiesContext;
 
-import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(properties = {
-    "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
-    "analytics.kafka.topic=wallet.transactions.v1"
-})
-@EmbeddedKafka(topics = { "wallet.transactions.v1" }, partitions = 1)
+@SpringBootTest
+@EmbeddedKafka(topics = { "wallet.transactions.v1", "wallet.transactions.v1.dlq" }, partitions = 1)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class TransactionEventConsumerTest {
 
@@ -43,8 +39,11 @@ class TransactionEventConsumerTest {
     @Autowired
     private TransactionRepository transactionRepository;
 
+    @Autowired
+    private TransactionEventConsumer consumer;
+
     private KafkaTemplate<String, String> kafkaTemplate;
-    private Consumer<String, String> consumer;
+    private Consumer<String, String> consumerVerifier;
 
     @BeforeEach
     void setUp() {
@@ -55,23 +54,23 @@ class TransactionEventConsumerTest {
         );
         kafkaTemplate = new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(producerProps));
 
-        Map<String, Object> consumerProps = Map.of(
+        Map<String, Object> verifierProps = Map.of(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.getBrokersAsString(),
-            ConsumerConfig.GROUP_ID_CONFIG, "test-group-" + UUID.randomUUID(),
+            ConsumerConfig.GROUP_ID_CONFIG, "verifier-" + UUID.randomUUID(),
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
             ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
             ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false
         );
-        consumer = new org.apache.kafka.clients.consumer.KafkaConsumer<>(consumerProps);
-        embeddedKafka.consumeFromEmbeddedTopics(consumer, "wallet.transactions.v1");
-        consumer.poll(Duration.ofMillis(500));
-        consumer.seekToBeginning(consumer.assignment());
+        consumerVerifier = new org.apache.kafka.clients.consumer.KafkaConsumer<>(verifierProps);
+        embeddedKafka.consumeFromEmbeddedTopics(consumerVerifier, "wallet.transactions.v1");
+        consumerVerifier.poll(Duration.ofMillis(500));
+        consumerVerifier.seekToBeginning(consumerVerifier.assignment());
     }
 
     @AfterEach
     void tearDown() {
-        if (consumer != null) consumer.close();
+        if (consumerVerifier != null) consumerVerifier.close();
     }
 
     @Test
@@ -85,16 +84,12 @@ class TransactionEventConsumerTest {
         kafkaTemplate.send("wallet.transactions.v1", eventId, json);
         kafkaTemplate.flush();
 
-        ConsumerRecord<String, String> record = KafkaTestUtils.getSingleRecord(consumer, "wallet.transactions.v1", Duration.ofSeconds(10));
+        ConsumerRecord<String, String> record = KafkaTestUtils.getSingleRecord(consumerVerifier, "wallet.transactions.v1", Duration.ofSeconds(10));
         assertEquals(eventId, record.key());
 
-        var handler = new TransactionEventConsumer(transactionRepository);
-        handler.consume(record, null);
+        consumer.consume(record, null);
 
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-            assertTrue(transactionRepository.existsByEventId(eventId))
-        );
-
+        assertTrue(transactionRepository.existsByEventId(eventId));
         Transaction tx = transactionRepository.findAll().stream()
             .filter(t -> t.getEventId().equals(eventId))
             .findFirst().orElseThrow();
@@ -114,19 +109,28 @@ class TransactionEventConsumerTest {
         kafkaTemplate.send("wallet.transactions.v1", eventId, json);
         kafkaTemplate.flush();
 
-        ConsumerRecord<String, String> record1 = KafkaTestUtils.getSingleRecord(consumer, "wallet.transactions.v1", Duration.ofSeconds(10));
-        var handler = new TransactionEventConsumer(transactionRepository);
+        ConsumerRecord<String, String> record1 = KafkaTestUtils.getSingleRecord(consumerVerifier, "wallet.transactions.v1", Duration.ofSeconds(10));
 
-        handler.consume(record1, null);
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-            assertEquals(1, transactionRepository.findAll().stream()
-                .filter(t -> t.getEventId().equals(eventId)).count())
-        );
+        consumer.consume(record1, null);
+        assertEquals(1, transactionRepository.findAll().stream()
+            .filter(t -> t.getEventId().equals(eventId)).count());
 
-        handler.consume(record1, null);
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-            assertEquals(1, transactionRepository.findAll().stream()
-                .filter(t -> t.getEventId().equals(eventId)).count())
-        );
+        consumer.consume(record1, null);
+        assertEquals(1, transactionRepository.findAll().stream()
+            .filter(t -> t.getEventId().equals(eventId)).count());
+    }
+
+    @Test
+    void shouldRejectMalformedEvent() {
+        String malformed = "{not valid json";
+        String eventId = "bad-key";
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            consumer.consume(
+                new ConsumerRecord<>("wallet.transactions.v1", 0, 0, eventId, malformed),
+                null
+            );
+        });
+        assertFalse(transactionRepository.existsByEventId(eventId));
     }
 }
