@@ -84,7 +84,10 @@ public class KafkaConsumerConfiguration {
         factory.setConsumerFactory(consumerFactory());
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
 
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate);
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
+            kafkaTemplate,
+            (record, exception) -> new org.apache.kafka.common.TopicPartition(DLQ_TOPIC, record.partition())
+        );
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(0, 0));
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
         factory.setCommonErrorHandler(errorHandler);
