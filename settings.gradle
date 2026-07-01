@@ -7,3 +7,5 @@ pluginManagement {
 }
 
 rootProject.name = 'wallet-analytics'
+
+includeBuild '../wallet-contracts'

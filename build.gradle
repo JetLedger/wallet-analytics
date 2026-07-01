@@ -13,10 +13,20 @@ java {
     }
 }
 
+ext {
+    set('springAiVersion', '2.0.1-SNAPSHOT')
+}
+
 repositories {
     mavenCentral()
     maven { url 'https://repo.spring.io/snapshot' }
     maven { url 'https://repo.spring.io/milestone' }
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+    }
 }
 
 dependencies {
@@ -25,6 +35,12 @@ dependencies {
     implementation 'org.springframework.kafka:spring-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'io.micrometer:micrometer-tracing'
+
+    implementation 'org.springframework.ai:spring-ai-starter-model-ollama'
+    implementation 'org.springframework.ai:spring-ai-starter-model-anthropic'
+
+    implementation 'com.jetledger:wallet-contracts'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -37,6 +53,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
     testImplementation 'org.awaitility:awaitility:4.3.0'
+    testImplementation 'org.springframework.ai:spring-ai-test'
+    testImplementation 'org.springframework.ai:spring-ai-spring-boot-testcontainers'
 }
 
 tasks.named('test') {

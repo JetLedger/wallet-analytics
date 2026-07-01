@@ -28,6 +28,7 @@ import java.util.Map;
 public class KafkaConsumerConfiguration {
 
     public static final String TRANSACTIONS_TOPIC = "wallet.transactions.v1";
+    public static final String CATEGORIZATIONS_TOPIC = "wallet.categorizations.v1";
     public static final String DLQ_TOPIC = "wallet.transactions.v1.dlq";
     public static final String CONSUMER_GROUP = "wallet-analytics";
 
@@ -37,6 +38,14 @@ public class KafkaConsumerConfiguration {
     @Bean
     public NewTopic transactionsTopic() {
         return TopicBuilder.name(TRANSACTIONS_TOPIC)
+            .partitions(3)
+            .replicas(1)
+            .build();
+    }
+
+    @Bean
+    public NewTopic categorizationsTopic() {
+        return TopicBuilder.name(CATEGORIZATIONS_TOPIC)
             .partitions(3)
             .replicas(1)
             .build();

@@ -16,6 +16,9 @@ spring:
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 server:
   port: 8081
@@ -23,6 +26,11 @@ server:
 analytics:
   kafka:
     topic: wallet.transactions.v1
+
+categorization:
+  confidence-threshold: 0.5
+  kafka:
+    topic: wallet.categorizations.v1
 
 management:
   endpoints:
@@ -32,3 +40,6 @@ management:
   metrics:
     tags:
       application: wallet-analytics
+  tracing:
+    sampling:
+      probability: 1.0

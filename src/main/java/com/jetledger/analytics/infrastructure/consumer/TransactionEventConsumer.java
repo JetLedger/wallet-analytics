@@ -1,24 +1,34 @@
 package com.jetledger.analytics.infrastructure.consumer;
 
+import com.jetledger.analytics.application.categorization.CategorizationService;
 import com.jetledger.analytics.domain.Transaction;
 import com.jetledger.analytics.domain.TransactionRepository;
+import com.jetledger.analytics.infrastructure.categorization.CategorizationResultPublisher;
+import com.jetledger.contracts.CategorizationResult;
+import java.math.BigDecimal;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
-import java.math.BigDecimal;
-import java.util.UUID;
 
 @Slf4j
 @Component
 public class TransactionEventConsumer {
 
     private final TransactionRepository transactionRepository;
+    private final CategorizationService categorizationService;
+    private final CategorizationResultPublisher categorizationPublisher;
 
-    public TransactionEventConsumer(TransactionRepository transactionRepository) {
+    public TransactionEventConsumer(
+            TransactionRepository transactionRepository,
+            CategorizationService categorizationService,
+            CategorizationResultPublisher categorizationPublisher) {
         this.transactionRepository = transactionRepository;
+        this.categorizationService = categorizationService;
+        this.categorizationPublisher = categorizationPublisher;
     }
 
     @KafkaListener(topics = "${analytics.kafka.topic:wallet.transactions.v1}", groupId = "${spring.kafka.consumer.group-id:wallet-analytics}")
@@ -62,6 +72,18 @@ public class TransactionEventConsumer {
             transactionRepository.flush();
             log.info("Persisted transaction: eventId={}, type={}, walletId={}, amount={} {}",
                 eventId, eventType, walletId, amount, currency);
+
+            CategorizationResult result = categorizationService.categorize(eventId, eventType, amount, currency);
+            transaction.applyCategorization(
+                result.category().name(),
+                BigDecimal.valueOf(result.confidence()),
+                result.humanReviewRequired(),
+                result.reasoning()
+            );
+            transactionRepository.save(transaction);
+
+            categorizationPublisher.publish(result);
+            log.info("Categorized transaction {} as {} (confidence={})", eventId, result.category(), result.confidence());
 
             if (ack != null) ack.acknowledge();
         } catch (Exception e) {
