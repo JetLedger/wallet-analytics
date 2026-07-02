@@ -53,26 +53,33 @@ public class TransactionEventConsumer {
         CloudEvent cloudEvent = cloudEventOpt.get();
         JsonNode data = cloudEvent.data();
 
+        UUID walletId = UUID.fromString(data.get("walletId").asText());
+        BigDecimal amount = new BigDecimal(data.get("amount").asText());
+        String currency = data.has("currency") ? data.get("currency").asText() : "USD";
+        BigDecimal balanceAfter = data.has("balanceAfter") ? new BigDecimal(data.get("balanceAfter").asText()) : null;
+        String correlationId = data.has("correlationId") ? data.get("correlationId").asText() : null;
+        java.time.Instant timestamp = java.time.Instant.parse(cloudEvent.time());
+
+        String eventType = mapType(cloudEvent.type());
+
+        Transaction transaction = new Transaction(
+            UUID.randomUUID(), eventId, walletId, eventType, amount, currency,
+            balanceAfter, correlationId, timestamp
+        );
+
         try {
-            UUID walletId = UUID.fromString(data.get("walletId").asText());
-            BigDecimal amount = new BigDecimal(data.get("amount").asText());
-            String currency = data.has("currency") ? data.get("currency").asText() : "USD";
-            BigDecimal balanceAfter = data.has("balanceAfter") ? new BigDecimal(data.get("balanceAfter").asText()) : null;
-            String correlationId = data.has("correlationId") ? data.get("correlationId").asText() : null;
-            java.time.Instant timestamp = java.time.Instant.parse(cloudEvent.time());
-
-            String eventType = mapType(cloudEvent.type());
-
-            Transaction transaction = new Transaction(
-                UUID.randomUUID(), eventId, walletId, eventType, amount, currency,
-                balanceAfter, correlationId, timestamp
-            );
-
             transactionRepository.save(transaction);
             transactionRepository.flush();
             log.info("Persisted transaction: eventId={}, type={}, walletId={}, amount={} {}",
                 eventId, eventType, walletId, amount, currency);
 
+            if (ack != null) ack.acknowledge();
+        } catch (Exception e) {
+            log.error("Failed to persist transaction {}: {}", eventId, e.getMessage(), e);
+            throw new IllegalArgumentException("Failed to persist transaction: " + eventId, e);
+        }
+
+        try {
             CategorizationResult result = categorizationService.categorize(eventId, eventType, amount, currency);
             transaction.applyCategorization(
                 result.category().name(),
@@ -81,14 +88,11 @@ public class TransactionEventConsumer {
                 result.reasoning()
             );
             transactionRepository.save(transaction);
-
             categorizationPublisher.publish(result);
             log.info("Categorized transaction {} as {} (confidence={})", eventId, result.category(), result.confidence());
-
-            if (ack != null) ack.acknowledge();
         } catch (Exception e) {
-            log.error("Failed to process event {}: {}", eventId, e.getMessage(), e);
-            throw new IllegalArgumentException("Failed to process event: " + eventId, e);
+            log.error("Categorization failed for transaction {}, transaction saved without category: {}",
+                eventId, e.getMessage(), e);
         }
     }
 
