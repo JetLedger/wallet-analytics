@@ -1,5 +1,6 @@
 package com.jetledger.analytics;
 
+import com.jetledger.analytics.config.TestCategorizationConfig;
 import com.jetledger.analytics.domain.Transaction;
 import com.jetledger.analytics.domain.TransactionRepository;
 import com.jetledger.analytics.infrastructure.consumer.TransactionEventConsumer;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -29,6 +31,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
+@Import(TestCategorizationConfig.class)
 @EmbeddedKafka(topics = { "wallet.transactions.v1", "wallet.transactions.v1.dlq" }, partitions = 1)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class TransactionEventConsumerTest {
@@ -96,6 +99,8 @@ class TransactionEventConsumerTest {
         assertEquals("DEPOSIT", tx.getType());
         assertEquals(UUID.fromString(walletId), tx.getWalletId());
         assertEquals(new BigDecimal("100.00"), tx.getAmount());
+        assertTrue(tx.isCategorized());
+        assertEquals("SALARY", tx.getCategory());
     }
 
     @Test

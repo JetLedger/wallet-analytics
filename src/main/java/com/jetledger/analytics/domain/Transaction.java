@@ -39,9 +39,25 @@ public class Transaction {
     @Column(name = "processed_at", nullable = false)
     private Instant processedAt;
 
+    @Column(length = 30)
+    private String category;
+
+    @Column(precision = 5, scale = 4)
+    private BigDecimal confidence;
+
+    @Column(name = "human_review_required")
+    private Boolean humanReviewRequired;
+
+    @Column(name = "categorized_at")
+    private Instant categorizedAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String reasoning;
+
     protected Transaction() {}
 
-    public Transaction(UUID id, String eventId, UUID walletId, String type, BigDecimal amount, String currency, BigDecimal balanceAfter, String correlationId, Instant timestamp) {
+    public Transaction(UUID id, String eventId, UUID walletId, String type, BigDecimal amount, String currency,
+                       BigDecimal balanceAfter, String correlationId, Instant timestamp) {
         this.id = id;
         this.eventId = eventId;
         this.walletId = walletId;
@@ -54,6 +70,18 @@ public class Transaction {
         this.processedAt = Instant.now();
     }
 
+    public void applyCategorization(String category, BigDecimal confidence, boolean humanReviewRequired, String reasoning) {
+        this.category = category;
+        this.confidence = confidence;
+        this.humanReviewRequired = humanReviewRequired;
+        this.reasoning = reasoning;
+        this.categorizedAt = Instant.now();
+    }
+
+    public boolean isCategorized() {
+        return category != null;
+    }
+
     public UUID getId() { return id; }
     public String getEventId() { return eventId; }
     public UUID getWalletId() { return walletId; }
@@ -64,4 +92,9 @@ public class Transaction {
     public String getCorrelationId() { return correlationId; }
     public Instant getTimestamp() { return timestamp; }
     public Instant getProcessedAt() { return processedAt; }
+    public String getCategory() { return category; }
+    public BigDecimal getConfidence() { return confidence; }
+    public Boolean getHumanReviewRequired() { return humanReviewRequired; }
+    public Instant getCategorizedAt() { return categorizedAt; }
+    public String getReasoning() { return reasoning; }
 }
